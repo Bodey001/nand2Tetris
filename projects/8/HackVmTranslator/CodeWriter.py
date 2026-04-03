@@ -9,6 +9,10 @@ class CodeWriter():
 
         self.file_name = os.path.basename(output_file)
 
+        # Bootstrap: SP = 256, then call Sys.init 0
+        self.file.write("@256\nD=A\n@SP\nM=D\n")
+        self.WriteCall("Sys.init", 0)
+
     def setFileName(self, file_name):
         self.file_name = file_name
 
@@ -62,7 +66,7 @@ class CodeWriter():
     def WritePushPop(self, command, segment, index):
         # Write the command to the output file
         if command == "C_PUSH":
-            
+
             self.file.write(f"// push {segment} {index}\n")
             if segment == "constant":
                 self.file.write(f"@{index}\nD=A\n")
@@ -138,6 +142,23 @@ class CodeWriter():
         self.file.write(f"@R13\nAM=M-1\nD=M\n@LCL\nM=D\n")
         #goto ret
         self.file.write(f"@R14\nA=M\n0;JMP\n")
+
+    def WriteCall(self, function_name, n_args):
+        self.file.write(f"// call {function_name} {n_args}\n")
+        return_label = f"RETURN_{function_name}_{self.file.tell()}"
+        # push return address
+        self.file.write(f"@{return_label}\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n")
+        # push LCL, ARG, THIS, THAT
+        for reg in ["LCL", "ARG", "THIS", "THAT"]:
+            self.file.write(f"@{reg}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n")
+        # ARG = SP - n_args - 5
+        self.file.write(f"@SP\nD=M\n@{n_args + 5}\nD=D-A\n@ARG\nM=D\n")
+        # LCL = SP
+        self.file.write(f"@SP\nD=M\n@LCL\nM=D\n")
+        # goto function
+        self.file.write(f"@{function_name}\n0;JMP\n")
+        # return address label
+        self.file.write(f"({return_label})\n")
 
     def close(self):
         self.file.close()

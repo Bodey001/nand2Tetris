@@ -120,8 +120,13 @@ Extended the VM translator (`projects/8/HackVmTranslator/`) to handle the full V
 | VM Command | CodeWriter method |
 |---|---|
 | `function` | `WriteFunction` — emits function entry label and zeroes local variables |
-| `call` | `WriteCall` — saves caller frame, sets up ARG/LCL, jumps to callee |
-| `return` | `WriteReturn` — restores caller frame, moves return value, resumes caller |
+| `call` | `WriteCall` — pushes return address + caller's LCL/ARG/THIS/THAT, repositions ARG and LCL, jumps to callee, plants return label |
+| `return` | `WriteReturn` — restores caller frame (THAT→THIS→ARG→LCL), moves return value to ARG[0], resets SP, jumps to saved return address |
+
+**Bootstrap**
+The `CodeWriter` constructor emits a bootstrap preamble at the top of every multi-file output:
+- Sets `SP = 256`
+- Calls `Sys.init 0` using the full `WriteCall` sequence so the initial frame is properly pushed onto the stack
 
 The translator accepts either a single `.vm` file or a directory (translating all `.vm` files to a single `.asm` output named after the directory).
 
