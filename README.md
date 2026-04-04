@@ -133,3 +133,10 @@ The translator accepts either a single `.vm` file or a directory (translating al
 Tested against:
 - **ProgramFlow**: `BasicLoop`, `FibonacciSeries`
 - **FunctionCalls**: `SimpleFunction`, `FibonacciElement`, `NestedCall`, `StaticsTest`
+
+> `FibonacciElement` computes the 3rd Fibonacci number and stores it in `RAM[261]`; expected output: `RAM[0]=262`, `RAM[261]=3` ✓
+
+---
+
+## Notes
+- `tools/bin/*.dat` files (emulator "last opened" state) are excluded via `.gitignore` and not tracked.
