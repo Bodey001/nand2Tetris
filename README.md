@@ -138,5 +138,23 @@ Tested against:
 
 ---
 
+### Project 9 – High-Level Language (Jack)
+Work in the **Jack** language: classes, methods, fields, arrays, and the OS API (`Math`, `String`, `Array`, `Screen`, `Keyboard`, `Memory`, `Output`, `Sys`). Programs are written as `.jack` sources and compiled to **VM code** (`.vm`) with the official Jack compiler for use in the VM Emulator or full toolchain.
+
+| Demo / exercise | Contents |
+|---|---|
+| `HelloWorld` | Minimal program using `Output` |
+| `Average` | Reads numbers and prints their average |
+| `ConvertToBin` | Binary representation on the screen |
+| `ComplexArrays` | Multi-dimensional array usage |
+| `Fraction` | `Fraction` class (constructor, accessors, arithmetic) |
+| `List` | Linked-list style structure |
+| `Square` | Interactive square (keyboard-driven) |
+| `Pong` | Full game: `Ball`, `Bat`, `PongGame`, `Main` |
+
+Generated `.vm` files are committed alongside `.jack` where present for quick testing without recompiling.
+
+---
+
 ## Notes
-- `tools/bin/*.dat` files (emulator "last opened" state) are excluded via `.gitignore` and not tracked.
+- `tools/bin/*.dat` — small state files used by the nand2tetris GUI tools (last opened file or folder per tool). They are **tracked** in this repo for convenience; expect them to change when you use the Assembler, CPU Emulator, Hardware Simulator, or VM Emulator.
