@@ -1,5 +1,4 @@
-from multiprocessing import current_process
-from operator import contains
+import re
 import os
 
 keyword_table = {
@@ -25,7 +24,6 @@ keyword_table = {
     "while": "WHILE",
     "return": "RETURN",
 }
-# symbol_tokens = ["{", "}", "(", ")", "[", "]", ".", ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"]
 
 symbol_table = {
     "{": "{",
@@ -47,155 +45,192 @@ symbol_table = {
     "<": "&lt;",
     ">": "&gt;",
     "&": "&amp;",
-    '"': "&quot;",
 }
 
-class JackTokenizer():
-    def __init__(self, input_file: str):
-        # opens the input .jack file and gets ready to tokenize it.
-       # Open the file
-        with open(input_file, "r") as file:
-            raw_lines = file.readlines()
+# Characters that are symbols (raw, for splitting)
+SYMBOL_CHARS = set("{}()[].,;+-*/|=~<>&")
+
+
+def _tokenize_line(line):
+    """Split a single stripped line into tokens, handling string literals atomically."""
+    tokens = []
+    i = 0
+    while i < len(line):
+        ch = line[i]
+
+        # String literal: consume everything up to the closing quote
+        if ch == '"':
+            j = line.index('"', i + 1)
+            tokens.append(line[i:j + 1])
+            i = j + 1
+
+        # Symbol: emit as its own token
+        elif ch in SYMBOL_CHARS:
+            tokens.append(ch)
+            i += 1
+
+        # Whitespace: skip
+        elif ch in (' ', '\t'):
+            i += 1
+
+        # Identifier or keyword or integer constant: consume run of non-special chars
+        else:
+            j = i
+            while j < len(line) and line[j] not in SYMBOL_CHARS and line[j] not in (' ', '\t', '"'):
+                j += 1
+            tokens.append(line[i:j])
+            i = j
+
+    return tokens
+
+
+class JackTokenizer:
+    def __init__(self, input_file: str, output_file: str = None):
+        """Tokenize the input .jack file.
+
+        output_file: path for the *T.xml token output. If None, derived from input_file.
+        """
+        with open(input_file, "r") as f:
+            raw_lines = f.readlines()
 
         self.tokens = []
 
-        # Read the file
-        for line in raw_lines:
-            # Remove comments and whitespaces
-            # if the line contains a comment, remove the comment
-            if "//" in line:
-                line = line.split("//")[0].strip()
-            # if the line contains a comment, remove the comment
-            elif "/**" in line:
-                line = line.split("/**")[0].strip()
-            # if the line contains a comment, remove the comment
-            elif "/**" in line and "*/" in line:
-                line = line.split("/**")[0].strip() + line.split("*/")[1].strip()
-            elif "*" in line:
-                line = line.split("*")[0].strip()
-            elif "*/" in line:
-                line = line.split("*/")[1].strip()
-            elif '\n' in line:
-                line = line.split('\n')[0].strip()
-            # if the line is not empty, add the line to the tokens
+        in_block_comment = False
+        for raw in raw_lines:
+            line = raw.rstrip('\n')
 
-            if line:
-                for symbol in symbol_table:
-                    line = line.replace(symbol, f" {symbol} ")
-                tokens_per_line = line.split()
-                for index, token in enumerate(tokens_per_line):
-                    # if the token starts with a quote and the next token endswith a quote, combine the two tokens
-                    if token.startswith('"') and tokens_per_line[index + 1].endswith('"'):
-                        token = token + " " + tokens_per_line[index + 1]
-                        self.tokens.append(token.strip())
-                    elif token.endswith('"'):
-                        # skip the next token
-                        continue
-                    else:
-                        self.tokens.append(token.strip())
+            # Handle block comments that span multiple lines
+            if in_block_comment:
+                if '*/' in line:
+                    line = line[line.index('*/') + 2:]
+                    in_block_comment = False
+                else:
+                    continue
 
+            # Inline block comment  /* ... */ on one line
+            while '/*' in line:
+                before = line[:line.index('/*')]
+                rest = line[line.index('/*'):]
+                if '*/' in rest:
+                    after = rest[rest.index('*/') + 2:]
+                    line = before + after
+                else:
+                    line = before
+                    in_block_comment = True
+                    break
 
-        print("\n\ntokens: ", self.tokens)
-        self.current_token = None
+            # Strip single-line comment
+            if '//' in line:
+                # Be careful not to strip // inside a string literal
+                # Scan character-by-character to find // outside quotes
+                in_str = False
+                for idx, ch in enumerate(line):
+                    if ch == '"':
+                        in_str = not in_str
+                    elif ch == '/' and not in_str and idx + 1 < len(line) and line[idx + 1] == '/':
+                        line = line[:idx]
+                        break
+
+            line = line.strip()
+            if not line:
+                continue
+
+            self.tokens.extend(_tokenize_line(line))
+
         self.current_index = 0
+        self.current_token = self.tokens[0] if self.tokens else None
 
-       # opens the output file and gets ready to write to it.
-        self.output_file = open(input_file.replace(".jack", "-analysisT.xml"), "w")
-        self.output_file.write("<tokens>")
+        # Open token output file
+        if output_file is None:
+            output_file = input_file.replace(".jack", "T.xml")
+        self._output_path = output_file
+        self._out = open(output_file, "w")
+        self._out.write("<tokens>\n")
+
+    # ------------------------------------------------------------------
+    # Navigation
+    # ------------------------------------------------------------------
 
     def hasMoreTokens(self):
-        # are there more tokens in the input
+        """True when current_token has not yet been consumed."""
         return self.current_index < len(self.tokens)
 
     def advance(self):
-        if self.hasMoreTokens():
-            #gets the next token from the input and sets it as the current token
+        """Move to the next token (increment index first, then read)."""
+        self.current_index += 1
+        if self.current_index < len(self.tokens):
             self.current_token = self.tokens[self.current_index]
-            self.current_index += 1
+        else:
+            self.current_token = None
+
+    # ------------------------------------------------------------------
+    # Token classification
+    # ------------------------------------------------------------------
 
     def tokenType(self):
-        # returns the type of the current token
-        # if current token is a keyword
-        if self.current_token in keyword_table.keys():
+        tok = self.current_token
+        if tok is None:
+            return "UNKNOWN"
+        if tok in keyword_table:
             return "KEYWORD"
-        # if current token is a symbol
-        elif self.current_token in symbol_table.keys():
+        if tok in symbol_table:
             return "SYMBOL"
-        # if current token is an integer constant betwen 0 and 32767
-        elif self.current_token.isdigit() and int(self.current_token) >= 0 and int(self.current_token) <= 32767:
+        if tok.lstrip('-').isdigit() and 0 <= int(tok) <= 32767:
             return "INT_CONST"
-        # if current token is an identifier (a sequence of letters, digits, and underscores, not starting with a digit)
-        elif self.current_token.isalpha() and not self.current_token.isdigit():
-            return "IDENTIFIER"
-        # if current token is a string constant (a sequence of characters not including the double quote or newline)
-        elif self.current_token.startswith('"') and self.current_token.endswith('"'):
+        if tok.startswith('"') and tok.endswith('"'):
             return "STRING_CONST"
-        # if current token is unknown
-        else:
-            return "UNKNOWN"
+        if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', tok):
+            return "IDENTIFIER"
+        return "UNKNOWN"
 
-    # if tokenType is KEYWORD, returns the keyword of the current token
     def keyword(self):
-        # returns the keyword of the current token
         if self.tokenType() == "KEYWORD":
-            return f" {self.current_token} "
-        else:
-            return "UNKNOWN"
+            return self.current_token
+        return None
 
-    # if tokenType is SYMBOL, returns the symbol of the current token
     def symbol(self):
-        # returns the symbol of the current token
+        """Return the raw symbol character (not HTML-escaped)."""
         if self.tokenType() == "SYMBOL":
-            return f" {symbol_table[self.current_token]} "
-        else:
-            return "UNKNOWN"
+            return self.current_token
+        return None
 
     def identifier(self):
         if self.tokenType() == "IDENTIFIER":
-            return f" {self.current_token} "
-        else:
-            return "UNKNOWN"
+            return self.current_token
+        return None
 
-    # if tokenType is INT_CONST, returns the integer constant of the current token
     def intVal(self):
         if self.tokenType() == "INT_CONST":
-            return f" {int(self.current_token)} "
-        else:
-            return "UNKNOWN"
+            return int(self.current_token)
+        return None
 
-    # if tokenType is STRING_CONST, returns the string constant of the current token
     def stringVal(self):
         if self.tokenType() == "STRING_CONST":
-            return f" {self.current_token.strip('"')} "
-        else:
-            return "UNKNOWN"
+            return self.current_token[1:-1]  # strip surrounding quotes
+        return None
+
+    # ------------------------------------------------------------------
+    # Token output (writes to *T.xml)
+    # ------------------------------------------------------------------
 
     def process(self):
-        # process the given string
-        if self.tokenType() == "KEYWORD":
-            self.output_file.write("\n<keyword>")
-            self.output_file.write(self.keyword())
-            self.output_file.write("</keyword>")
-        elif self.tokenType() == "SYMBOL":
-            self.output_file.write("\n<symbol>")
-            self.output_file.write(self.symbol())
-            self.output_file.write("</symbol>")
-        elif self.tokenType() == "INT_CONST":
-            self.output_file.write("\n<integerConstant>")
-            self.output_file.write(str(self.intVal()))
-            self.output_file.write("</integerConstant>")
-        elif self.tokenType() == "IDENTIFIER":
-            self.output_file.write("\n<identifier>")
-            self.output_file.write(self.identifier())
-            self.output_file.write("</identifier>")
-        elif self.tokenType() == "STRING_CONST":
-            self.output_file.write("\n<stringConstant>")
-            self.output_file.write(self.stringVal())
-            self.output_file.write("</stringConstant>")
+        """Write the current token to the T.xml file and advance."""
+        tt = self.tokenType()
+        if tt == "KEYWORD":
+            self._out.write(f"<keyword> {self.keyword()} </keyword>\n")
+        elif tt == "SYMBOL":
+            xml_sym = symbol_table[self.current_token]
+            self._out.write(f"<symbol> {xml_sym} </symbol>\n")
+        elif tt == "INT_CONST":
+            self._out.write(f"<integerConstant> {self.intVal()} </integerConstant>\n")
+        elif tt == "IDENTIFIER":
+            self._out.write(f"<identifier> {self.identifier()} </identifier>\n")
+        elif tt == "STRING_CONST":
+            self._out.write(f"<stringConstant> {self.stringVal()} </stringConstant>\n")
         else:
-            self.output_file.write("\nsyntax error")
+            self._out.write(f"<!-- UNKNOWN token: {self.current_token} -->\n")
+        self.advance()
 
-    # closes the output file
     def close(self):
-        self.output_file.write("\n</tokens>")
-        self.output_file.close()
+        self._out.write("</tokens>\n")
+        self._out.close()

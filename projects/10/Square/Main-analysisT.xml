@@ -70,8 +70,7 @@
 <keyword> let </keyword>
 <identifier> s </identifier>
 <symbol> = </symbol>
-<identifier> string </identifier>
-<identifier> constant </identifier>
+<stringConstant> string constant </stringConstant>
 <symbol> ; </symbol>
 <keyword> let </keyword>
 <identifier> s </identifier>
@@ -96,6 +95,12 @@
 <identifier> i </identifier>
 <symbol> = </symbol>
 <identifier> i </identifier>
+<symbol> * </symbol>
+<symbol> ( </symbol>
+<symbol> - </symbol>
+<identifier> j </identifier>
+<symbol> ) </symbol>
+<symbol> ; </symbol>
 <keyword> let </keyword>
 <identifier> j </identifier>
 <symbol> = </symbol>
@@ -118,3 +123,4 @@
 <symbol> ; </symbol>
 <symbol> } </symbol>
 <symbol> } </symbol>
+</tokens>

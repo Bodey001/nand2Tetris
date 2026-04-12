@@ -1,51 +1,69 @@
-# takes in a .jack file or a folder containing .jack files, analyses it and print to .xml files
-# the .xml files will contain the analysis of the .jack file
-# the .xml files will be named like the .jack file but with the .xml extension
-# the .xml files will be written to the same directory as the .jack files
+"""JackAnalyzer – driver for the Jack syntax analyzer (Project 10).
+
+Usage:
+    python JackAnalyzer.py <file.jack>        -- analyse one file
+    python JackAnalyzer.py <directory>        -- analyse every .jack file in the directory
+
+For each .jack file the analyzer produces two output files next to the source:
+    <Name>T.xml   – flat token stream (tokenizer output, for Phase-1 testing)
+    <Name>.xml    – full parse tree  (compilation engine output)
+"""
 
 import os
 import sys
 from JackTokenizer import JackTokenizer
+from CompilationEngine import CompilationEngine
+
+
+def analyse_file(jack_path: str):
+    """Tokenize and parse a single .jack file."""
+    base = jack_path[:-5]          # strip ".jack"
+    token_out = base + "-analysisT.xml"
+    parse_out = base + "-analysis.xml"
+
+    # --- Phase 1: tokenizer output ---
+    tokenizer = JackTokenizer(jack_path, output_file=token_out)
+    while tokenizer.hasMoreTokens():
+        tokenizer.process()
+    tokenizer.close()
+
+    # --- Phase 2: compilation engine ---
+    # Re-tokenize to get a fresh token list for the parser
+    tokenizer2 = JackTokenizer.__new__(JackTokenizer)
+    tokenizer2.tokens = tokenizer.tokens
+    tokenizer2.current_index = 0
+    tokenizer2.current_token = tokenizer.tokens[0] if tokenizer.tokens else None
+
+    engine = CompilationEngine(tokenizer.tokens, parse_out)
 
 
 def main():
-    # check if the analyzer's input is a folder or a file
     if len(sys.argv) != 2:
         print("Usage: python JackAnalyzer.py [file.jack or directory]")
         return
 
     input_path = sys.argv[1]
-    jack_files = []
 
-
-    # Check if the input is a folder or a file
     if os.path.isfile(input_path) and input_path.endswith(".jack"):
-        # add the absolute path of the file to the list of jack files
-        jack_files.append(os.path.abspath(input_path))
-        # create the output file name by replacing the .jack with -analysisT.xml
-        output_file = os.path.abspath(input_path).replace(".jack", "-analysisT.xml")
+        analyse_file(os.path.abspath(input_path))
 
     elif os.path.isdir(input_path):
-        # add the absolute path of the files in the folder to the list of jack files
-        for file in os.listdir(input_path):
-            if file.endswith(".jack"):
-                jack_files.append(os.path.abspath(os.path.join(input_path, file)))
-        # create the output file name by adding the folder name to -analysisT.xml
-        folder_name = os.path.basename(input_path)
-        output_file = os.path.join(input_path, folder_name + "-analysisT.xml")
+        jack_files = [
+            os.path.abspath(os.path.join(input_path, f))
+            for f in os.listdir(input_path)
+            if f.endswith(".jack")
+        ]
+        if not jack_files:
+            print(f"No .jack files found in {input_path}")
+            return
+        for jack_file in jack_files:
+            analyse_file(jack_file)
+
     else:
         resolved = os.path.abspath(input_path)
-        print("Error: Invalid input. Pass a .jack file or a directory containing .jack files.")
-        print(f"  Resolved path (not found or not valid): {resolved}")
-        return
+        print("Error: pass a .jack file or a directory containing .jack files.")
+        print(f"  Resolved path: {resolved}")
 
-    # create a tokenizer for each jack file
-    for jack_file in jack_files:
-        tokenizer = JackTokenizer(jack_file)
-        # tokenize the jack file
-        while tokenizer.hasMoreTokens():
-            tokenizer.advance()
-            tokenizer.process()
 
 if __name__ == "__main__":
-    main()  # run the main function
+    main()
