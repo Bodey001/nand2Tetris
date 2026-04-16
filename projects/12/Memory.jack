@@ -6,28 +6,76 @@
  * This library provides two services: direct access to the computer's main
  * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
  * consists of 32,768 words, each holding a 16-bit binary number.
- */ 
+ */
 class Memory {
+    static Array memory;   // Maps entire RAM via base address 0
+    static int freeList;   // Head of the free segment linked list
+
+    // Free list segment layout:
+    //   segment[0] = size of this block (number of usable words)
+    //   segment[1] = next segment pointer (0 = null)
+    //   segment[2..size] = usable data words
 
     /** Initializes the class. */
     function void init() {
+        let memory = 0;
+        let freeList = 2048;
+        let memory[2048] = 14335;  // size: heap end(16383) - start(2048) = 14335 usable words
+        let memory[2049] = 0;      // next = null
+        return;
     }
 
     /** Returns the RAM value at the given address. */
     function int peek(int address) {
+        return memory[address];
     }
 
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
+        let memory[address] = value;
+        return;
     }
 
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
+        var int segment, prevSegment, blockSize, next;
+        let segment = freeList;
+        let prevSegment = 0;
+
+        while (~(segment = 0)) {
+            let blockSize = memory[segment];
+            if (~(blockSize < (size + 1))) {
+                // Found a block big enough: carve out size+1 words from the end
+                let memory[segment] = blockSize - size - 1;
+                let next = segment + blockSize - size;
+                let memory[next] = size;
+                return next + 1;
+            }
+            let prevSegment = segment;
+            let segment = memory[segment + 1];
+        }
+
+        // No block found (out of memory) — return -1 to signal error
+        return -1;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
-    }    
+        var int segment, last;
+        let segment = o - 1;       // segment header is one word before the data
+        let last = freeList;
+        if (last = 0) {
+            let freeList = segment;
+            let memory[segment + 1] = 0;
+            return;
+        }
+        while (~(memory[last + 1] = 0)) {
+            let last = memory[last + 1];
+        }
+        let memory[last + 1] = segment;
+        let memory[segment + 1] = 0;
+        return;
+    }
 }

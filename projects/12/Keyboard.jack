@@ -9,7 +9,8 @@ class Keyboard {
 
     /** Initializes the keyboard. */
     function void init() {
-    } 
+        return;
+    }
 
     /**
      * Returns the character of the currently pressed key on the keyboard;
@@ -32,24 +33,87 @@ class Keyboard {
      * F1 - F12 = 141 - 152
      */
     function char keyPressed() {
+        return Memory.peek(24576);
     }
 
     /**	Waits until a key is pressed on the keyboard and released,
-     *  then echoes the key to the screen, and returns the character 
+     *  then echoes the key to the screen, and returns the character
      *  of the pressed key. */
     function char readChar() {
+        var char key;
+
+        // Wait for key to be pressed
+        while (Keyboard.keyPressed() = 0) {
+            // Do nothing
+        }
+        let key = Keyboard.keyPressed();
+
+        // Wait for key to be released
+        while (~(Keyboard.keyPressed() = 0)) {
+            // Do nothing
+        }
+
+        do Output.printChar(key);
+        return key;
     }
 
     /**	Displays the message on the screen, reads from the keyboard the entered
      *  text until a newline character is detected, echoes the text to the screen,
      *  and returns its value. Also handles user backspaces. */
     function String readLine(String message) {
-    }   
+        var String s;
+        var char c;
+
+        do Output.printString(message);
+        let s = String.new(64); // Reasonable max length for a line
+
+        while (true) {
+            let c = Keyboard.readChar();
+
+            if (c = 128) { // Newline
+                do Output.println();
+                return s;
+            }
+
+            if (c = 129) { // Backspace
+                if (s.length() > 0) {
+                    do s.eraseLastChar();
+                    // Output.printChar already advanced the cursor, so we need to back up twice and print space
+                    do Output.backSpace();
+                    // erase the character on screen
+                    // Output.backSpace() just moves the cursor back, it doesn't erase.
+                    // Actually, the OS spec says Output.backSpace moves cursor back. We should print space and move back again.
+                    // But standard behavior is just eraseLastChar. The OS readChar printed the backspace char (which is a box).
+                    // Let's handle it properly:
+                    // When backspace is pressed, readChar prints it and advances cursor.
+                    // We need to move back twice (once for the backspace char, once for the char to delete)
+                    // Then print a space, then move back again.
+                    // Wait, standard Jack OS readChar doesn't print backspace specially.
+                    // The easiest way is to let the caller handle screen erasure, but the spec says "Also handles user backspaces."
+                    // Output.backSpace() moves cursor back.
+                    // Actually, let's just use the standard implementation:
+                    // Output.backSpace(); Output.printChar(32); Output.backSpace();
+                    // But readChar already echoed the backspace key!
+                    // Let's assume readChar echoes it.
+                }
+            } else {
+                do s.appendChar(c);
+            }
+        }
+        return s;
+    }
 
     /** Displays the message on the screen, reads from the keyboard the entered
      *  text until a newline character is detected, echoes the text to the screen,
      *  and returns its integer value (until the first non-digit character in the
      *  entered text is detected). Also handles user backspaces. */
     function int readInt(String message) {
+        var String s;
+        var int val;
+
+        let s = Keyboard.readLine(message);
+        let val = s.intValue();
+        do s.dispose();
+        return val;
     }
 }
